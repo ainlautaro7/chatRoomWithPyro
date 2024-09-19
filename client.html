@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Client</title>
+    <style>
+        #messages {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 200px;
+            overflow-y: scroll;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chat Client</h1>
+    <div>
+        <label for="username">Username:</label>
+        <input type="text" id="username">
+        <button onclick="registerClient()">Register</button>
+    </div>
+    <div>
+        <label for="receiver">Receiver:</label>
+        <input type="text" id="receiver">
+        <label for="message">Message:</label>
+        <input type="text" id="message">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+    <div id="messages"></div>
+    <script src="client.js"></script>
+</body>
+</html>
