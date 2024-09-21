@@ -1,6 +1,8 @@
+const server = 'http://192.168.124.224:5000';
+
 const registerClient = async () => {
     const name = document.getElementById('username').value;
-    const response = await fetch('http://192.168.124.224:5000/register', {
+    const response = await fetch(`${server}/register`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -23,7 +25,7 @@ const registerClient = async () => {
 };
 
 const validateUser = async (username) => {
-    const response = await fetch(`http://192.168.124.224:5000/validate?username=${username}`);
+    const response = await fetch(`${server}/validate?username=${username}`);
     return response.ok;
 };
 
@@ -47,7 +49,7 @@ const sendMessage = async () => {
     }
 
     // Si ambos están registrados, enviamos el mensaje
-    const response = await fetch('http://192.168.124.224:5000/send', {
+    const response = await fetch(`${server}/send`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -70,7 +72,7 @@ const sendMessage = async () => {
 
 // Function to handle incoming messages
 const setupMessageStream = (clientName) => {
-    const eventSource = new EventSource(`http://192.168.124.224:5000/messages?client=${clientName}`);
+    const eventSource = new EventSource(`${server}/messages?client=${clientName}`);
     eventSource.onmessage = (event) => {
         const message = JSON.parse(event.data);
         addMessage(message.from_user, message.message, 'received');
@@ -82,7 +84,7 @@ const addMessage = (from, message, type) => {
     const messageDiv = document.getElementById('messages');
     const messageElement = document.createElement('div');
     messageElement.className = `message ${type}`;
-    messageElement.textContent = `${from}: ${message}`;
+    messageElement.textContent = `${message}`;
     messageDiv.appendChild(messageElement);
     messageDiv.scrollTop = messageDiv.scrollHeight; // Desplazar hacia abajo al nuevo mensaje
 };
