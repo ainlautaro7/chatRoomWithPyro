@@ -22,11 +22,31 @@ const registerClient = async () => {
     }
 };
 
+const validateUser = async (username) => {
+    const response = await fetch(`http://192.168.124.224:5000/validate?username=${username}`);
+    return response.ok;
+};
+
 const sendMessage = async () => {
     const from = localStorage.getItem('client_name');
     const to = document.getElementById('receiver').value;
     const message = document.getElementById('message').value;
 
+    // Validar si el emisor está registrado
+    const fromExists = await validateUser(from);
+    if (!fromExists) {
+        alert('El usuario emisor no está registrado.');
+        return;
+    }
+
+    // Validar si el receptor está registrado
+    const toExists = await validateUser(to);
+    if (!toExists) {
+        alert('El receptor no está registrado.');
+        return;
+    }
+
+    // Si ambos están registrados, enviamos el mensaje
     const response = await fetch('http://192.168.124.224:5000/send', {
         method: 'POST',
         headers: {
@@ -38,6 +58,7 @@ const sendMessage = async () => {
     if (response.ok) {
         const data = await response.json();
         if (data.message) {
+            addMessage(from, message, 'sent');
             alert(data.message);
         } else {
             alert(`Failed to send message: ${data.error}`);
@@ -51,18 +72,26 @@ const sendMessage = async () => {
 const setupMessageStream = (clientName) => {
     const eventSource = new EventSource(`http://192.168.124.224:5000/messages?client=${clientName}`);
     eventSource.onmessage = (event) => {
-        const messageDiv = document.getElementById('messages');
         const message = JSON.parse(event.data);
-        const messageElement = document.createElement('div');
-        messageElement.textContent = `From ${message.from_user}: ${message.message}`;
-        messageDiv.appendChild(messageElement);
+        addMessage(message.from_user, message.message, 'received');
     };
 };
 
+// Function to add messages to the chat
+const addMessage = (from, message, type) => {
+    const messageDiv = document.getElementById('messages');
+    const messageElement = document.createElement('div');
+    messageElement.className = `message ${type}`;
+    messageElement.textContent = `${from}: ${message}`;
+    messageDiv.appendChild(messageElement);
+    messageDiv.scrollTop = messageDiv.scrollHeight; // Desplazar hacia abajo al nuevo mensaje
+};
+
 window.onload = () => {
-    // Check if client name is already stored
     const clientName = localStorage.getItem('client_name');
-    if (clientName) {
-        setupMessageStream(clientName);
-    }
+    validateUser(clientName).then((validate) => {
+        if (validate) {
+            setupMessageStream(clientName);
+        }
+    });
 };

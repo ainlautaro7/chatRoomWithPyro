@@ -15,35 +15,46 @@ message_queues = defaultdict(list)  # Queue messages for each client
 #region chats
 @Pyro5.api.expose
 class ChatClient:
+    def __init__(self, name):
+        self.name = name
+
     def receive_message(self, from_user, message):
         # Enviar el mensaje a la cola para este cliente
-        if from_user in clients:
-            message_queues[from_user].append({
+        if self.name in message_queues:
+            message_queues[self.name].append({
                 'from_user': from_user,
                 'message': message
             })
         else:
-            print(f"Error: Client {from_user} not found for receiving message.")
+            print(f"Error: Client {self.name} not found for receiving message.")
 
 @Pyro5.api.expose
 class ChatServer:
     def register_client(self, name):
-        client_uri = f"PYRO:obj_{name}"
+        # Crear una instancia de ChatClient para el cliente
+        client = ChatClient(name)
+        # Registrar el cliente en el daemon y obtener su URI
+        client_uri = daemon.register(client)
         clients[name] = client_uri
+
+        # Asegurarse de que la cola de mensajes para el cliente esté inicializada
+        if name not in message_queues:
+            message_queues[name] = []
+
         print(f"Client registered: {name} with URI {client_uri}")
-        return {'client_uri': client_uri}
+        return {'client_uri': str(client_uri)}
 
     def send_message(self, from_user, to_user, message):
         if to_user in clients:
-            uri = clients[to_user]  # No se debe modificar la URI, ya está en el formato correcto
-            print(f"Sending message to URI: {uri}")  # Imprime la URI a la que se está enviando el mensaje
+            uri = clients[to_user]  # Usar la URI correcta del cliente
+            print(f"Sending message to URI: {uri}")
             try:
                 with Pyro5.api.Proxy(uri) as recipient:
                     recipient.receive_message(from_user, message)
                 return {'message': 'Message sent'}
             except Pyro5.errors.PyroError as e:
-                print(f"PyroError: {e}")  # Imprime el error específico de Pyro
-                return {'error': f'Failed to send message: {str(e)} {uri}'}
+                print(f"PyroError: {e}")
+                return {'error': f'Failed to send message: {str(e)}'}
         else:
             return {'error': 'Recipient not found'}
 #endregion
@@ -99,7 +110,8 @@ def send():
 def messages():
     client_name = request.args.get('client')
     print(f"Request for messages for client: {client_name}")
-    if client_name in message_queues:
+    
+    if client_name in clients:
         def generate():
             while True:
                 if message_queues[client_name]:
@@ -110,12 +122,23 @@ def messages():
 
         return Response(generate(), mimetype='text/event-stream')
     else:
-        print(f"Client '{client_name}' not found. Registered clients: {list(clients.keys())}")
+        print(f"Client '{client_name}' not found.")
         return jsonify({'error': 'Client not found'}), 404
 
 @app.route('/clients', methods=['GET'])
 def list_clients():
     return jsonify({'clients': list(clients.keys())})
+
+@app.route('/validate', methods=['GET'])
+def validate_user():
+    username = request.args.get('username')
+    if not username:
+        return jsonify({'error': 'Username not provided'}), 400
+
+    if username in clients:
+        return jsonify({'message': f'User {username} is registered'}), 200
+    else:
+        return jsonify({'error': f'User {username} not found'}), 404
 #endregion
 
 def run_flask_app():
