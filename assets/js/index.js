@@ -16,6 +16,7 @@ const registerClient = async () => {
             localStorage.setItem('client_name', name);
             console.info(`Client registered with URI: ${data.client_uri}`);
             setupMessageStream(name);
+            window.location = "client.html";
         } else {
             console.error('Failed to register client.');
         }
@@ -24,6 +25,10 @@ const registerClient = async () => {
     }
 };
 
+const setReceiver = (receiver)=>{
+    localStorage.receiver = receiver;
+}
+
 const validateUser = async (username) => {
     const response = await fetch(`${server}/validate?username=${username}`);
     return response.ok;
@@ -31,8 +36,9 @@ const validateUser = async (username) => {
 
 const sendMessage = async () => {
     const from = localStorage.getItem('client_name');
-    const to = document.getElementById('receiver').value;
+    const to = localStorage.receiver;
     const message = document.getElementById('message').value;
+    document.getElementById('message').value = "";
 
     // Validar si el emisor está registrado
     const fromExists = await validateUser(from);
@@ -90,7 +96,6 @@ const addMessage = (from, message, type) => {
 };
 
 window.onload = () => {
-    const clientName = localStorage.getItem('client_name');
     validateUser(clientName).then((validate) => {
         if (validate) {
             setupMessageStream(clientName);
