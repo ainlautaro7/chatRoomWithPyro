@@ -14,13 +14,13 @@ const registerClient = async () => {
         const data = await response.json();
         if (data.client_uri) {
             localStorage.setItem('client_name', name);
-            alert(`Client registered with URI: ${data.client_uri}`);
+            console.info(`Client registered with URI: ${data.client_uri}`);
             setupMessageStream(name);
         } else {
-            alert('Failed to register client.');
+            console.error('Failed to register client.');
         }
     } else {
-        alert('Error registering client.');
+        console.error('Error registering client.');
     }
 };
 
@@ -37,14 +37,14 @@ const sendMessage = async () => {
     // Validar si el emisor está registrado
     const fromExists = await validateUser(from);
     if (!fromExists) {
-        alert('El usuario emisor no está registrado.');
+        console.error('El usuario emisor no está registrado.');
         return;
     }
 
     // Validar si el receptor está registrado
     const toExists = await validateUser(to);
     if (!toExists) {
-        alert('El receptor no está registrado.');
+        console.error('El receptor no está registrado.');
         return;
     }
 
@@ -61,12 +61,12 @@ const sendMessage = async () => {
         const data = await response.json();
         if (data.message) {
             addMessage(from, message, 'sent');
-            alert(data.message);
+            console.info(data.message);
         } else {
-            alert(`Failed to send message: ${data.error}`);
+            console.error(`Failed to send message: ${data.error}`);
         }
     } else {
-        alert('Error sending message.');
+        console.error('Error sending message.');
     }
 };
 

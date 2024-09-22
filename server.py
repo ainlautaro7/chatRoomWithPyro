@@ -1,17 +1,19 @@
 import Pyro5.api
+import Pyro5.nameserver
 import socket
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from collections import defaultdict
 import time
 import json
+from threading import Thread
 
 app = Flask(__name__)
 CORS(app)
 
 # Diccionario para almacenar clientes y colas de mensajes
 clients = {}
-message_queues = defaultdict(list)  # Queue messages for each client
+message_queues = defaultdict(list)
 
 #region chats
 @Pyro5.api.expose
@@ -21,8 +23,6 @@ class ChatClient:
 
     def receive_message(self, from_user, message):
         # Recibe un mensaje de otro usuario y lo agrega a la cola de mensajes del cliente.
-        # :param from_user: Nombre del usuario que envía el mensaje.
-        # :param message: Contenido del mensaje.
         if self.name in message_queues:
             message_queues[self.name].append({
                 'from_user': from_user,
@@ -35,8 +35,6 @@ class ChatClient:
 class ChatServer:
     def register_client(self, name):
         # Registra un nuevo cliente en el servidor y devuelve su URI.
-        # :param name: Nombre del cliente que se va a registrar.
-        # :return: URI del cliente registrado.
         client = ChatClient(name)
         client_uri = daemon.register(client)
         clients[name] = client_uri
@@ -48,11 +46,7 @@ class ChatServer:
         return {'client_uri': str(client_uri)}
 
     def send_message(self, from_user, to_user, message):
-        # Envía un mensaje de un usuario a otro, utilizando la URI del receptor.
-        # :param from_user: Nombre del usuario que envía el mensaje.
-        # :param to_user: Nombre del usuario que recibe el mensaje.
-        # :param message: Contenido del mensaje.
-        # :return: Resultado del envío del mensaje.
+        # Envía un mensaje de un usuario a otro utilizando la URI del receptor.
         if to_user in clients:
             uri = clients[to_user]
             print(f"Sending message to URI: {uri}")
@@ -69,7 +63,6 @@ class ChatServer:
 
 def get_public_ip():
     # Obtiene la dirección IP pública del servidor.
-    # :return: IP pública como cadena. Si hay un error, retorna 'localhost'.
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(0)
@@ -82,36 +75,40 @@ def get_public_ip():
         s.close()
     return ip
 
-#Se crea una instancia del daemon de Pyro5. El parámetro host se establece en la 
-# dirección IP pública del servidor (obtenida a través de la función get_public_ip()). 
-# Esto permite que los clientes se conecten al servidor utilizando la IP correcta.
+# Función para iniciar el Name Server de Pyro5 en un hilo separado
+def start_nameserver():
+    # El Name Server es necesario para registrar y buscar URIs de objetos Pyro.
+    # Se inicia dentro de un bucle para funcionar continuamente.
+    Pyro5.nameserver.start_ns_loop()
+
+# Crear y lanzar el hilo que ejecutará el Name Server de Pyro5
+ns_thread = Thread(target=start_nameserver)
+ns_thread.start()
+
+# Pequeña pausa para asegurarnos de que el Name Server está en funcionamiento antes de intentar localizarlo
+time.sleep(2)
+
+# Se crea una instancia del daemon de Pyro5 para escuchar las solicitudes de los clientes
 daemon = Pyro5.server.Daemon(host=get_public_ip())
 
-#Se localiza el Name Server de Pyro5, que es un servicio que permite a los clientes 
-# encontrar los objetos remotos registrados en el servidor.
+# Se localiza el Name Server de Pyro5 para registrar el servidor de chat
 ns = Pyro5.api.locate_ns()
 
-#Se crea una instancia de la clase ChatServer, que contiene la lógica para 
-# registrar clientes y enviar mensajes.
+# Se crea una instancia del servidor de chat
 chat_server = ChatServer()
 
-#Se registra la instancia del servidor de chat (chat_server) en el daemon, lo que permite 
-# que sea accesible a través de un URI (Uniform Resource Identifier). Este URI es una 
-# referencia única que los clientes usarán para interactuar con el servidor de chat.
+# Se registra el servidor de chat en el daemon para obtener su URI
 chat_server_uri = daemon.register(chat_server)
 
-# Se registra el URI del servidor de chat en el Name Server bajo el nombre 
-# "server.chat". Esto permite que los clientes busquen el servidor 
-# de chat utilizando este nombre y obtengan la URI para conectarse.
+# Se registra el URI del servidor de chat en el Name Server bajo el nombre "server.chat"
 ns.register("server.chat", chat_server_uri)
 
 print(f"Server is ready. URI: {chat_server_uri}")
 
-#region endpoints utilizados por el cliente
+#region endpoints para el cliente Flask
 @app.route('/register', methods=['POST'])
 def register():
-    # Endpoint para registrar un cliente.
-    # :return: JSON con el URI del cliente registrado o un error si los datos son inválidos.
+    # Endpoint para registrar un cliente en el servidor de chat.
     data = request.json
     name = data.get('name')
     if name:
@@ -123,7 +120,6 @@ def register():
 @app.route('/send', methods=['POST'])
 def send():
     # Endpoint para enviar un mensaje de un usuario a otro.
-    # :return: Resultado del envío del mensaje o un error si los datos son inválidos.
     data = request.json
     from_user = data.get('from')
     to_user = data.get('to')
@@ -137,8 +133,7 @@ def send():
 
 @app.route('/messages', methods=['GET'])
 def messages():
-    # Endpoint para recibir mensajes de un cliente en tiempo real.
-    # :return: Stream de eventos con los mensajes para el cliente.
+    # Endpoint para recibir mensajes en tiempo real para un cliente específico.
     client_name = request.args.get('client')
     print(f"Request for messages for client: {client_name}")
     
@@ -159,13 +154,11 @@ def messages():
 @app.route('/clients', methods=['GET'])
 def list_clients():
     # Endpoint para listar todos los clientes registrados.
-    # :return: JSON con la lista de nombres de los clientes.
     return jsonify({'clients': list(clients.keys())})
 
 @app.route('/validate', methods=['GET'])
 def validate_user():
     # Endpoint para validar si un usuario está registrado.
-    # :return: Mensaje de validación o error si el usuario no está registrado.
     username = request.args.get('username')
     if not username:
         return jsonify({'error': 'Username not provided'}), 400
@@ -177,22 +170,14 @@ def validate_user():
 #endregion
 
 def run_flask_app():
-    # Función para ejecutar la aplicación Flask.
+    # Ejecuta la aplicación Flask en un hilo separado para que funcione en paralelo con Pyro5.
     app.run(host='0.0.0.0', port=5000)
 
-#verifica si el script se esta ejecutando como programa principal
+# Se ejecuta cuando el script es lanzado como programa principal
 if __name__ == '__main__':
-    #importa la clase Thread del módulo threading, que permite crear y manejar hilos de ejecución.
-    from threading import Thread
-    
-    #crea un nuevo hilo (flask_thread) que ejecutará la función run_flask_app, la cual inicia el servidor Flask.
+    # Crear y lanzar el hilo que ejecutará la aplicación Flask
     flask_thread = Thread(target=run_flask_app)
-    
-    #crea un nuevo hilo (flask_thread) que ejecutará la función run_flask_app, la cual inicia el servidor Flask.
     flask_thread.start()
-        
-    # Inicia un bucle que permite que el daemon de Pyro5 
-    # escuche y procese las solicitudes de los clientes de chat. Esto mantiene 
-    # la aplicación en ejecución, gestionando la comunicación de Pyro5 mientras 
-    # el servidor Flask opera en segundo plano.
+    
+    # Mantiene el daemon de Pyro5 en ejecución, escuchando solicitudes
     daemon.requestLoop()
