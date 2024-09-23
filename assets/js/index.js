@@ -95,10 +95,9 @@ const searchUsers = async () => {
     if (response.ok) {
         const result = await response.json();
         result.users.forEach(user => {
-            const userElement = document.createElement('li');
-            userElement.classList.add('nav-item');
-            userElement.innerHTML = `
-                <div class="receiver-container p-2 bg-light text-dark my-2" onclick="selectUser('${user}')">${user}</div>`;
+            const userElement = document.createElement('div');
+            userElement.classList.add('nav-item');  // Agregas la clase 'nav-item'
+            userElement.innerHTML = `<div class="receiver-container p-2 bg-light text-dark my-2" onclick="selectUser('${user}')">${user}</div>`;
             userList.appendChild(userElement);
         });
         userList.style.display = result.users.length > 0 ? 'block' : 'none';
